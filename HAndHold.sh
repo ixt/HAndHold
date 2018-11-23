@@ -23,7 +23,8 @@ calc_whiptail_size(){
 
 do_update_package_database(){
     adb shell pm list packages \
-        > $TEMPPACKAGESDB
+        | cut -d: -f2  \
+            > $TEMPPACKAGESDB
     [[ "$?" -ne "0" ]] && exit 1
     whiptail --textbox "Packages found: $(cat $TEMPPACKAGESDB | wc -l)" 10 20
 }
@@ -76,14 +77,19 @@ do_package_list_downloads(){
     if [ $RET -eq 1 ]; then
         exit 1
     elif [ $RET -eq 0 ]; then
-        do_android_pull "${files[$index]}"
+        local FILEPATH=$(adb shell pm list packages -f \
+                            | egrep "=${files[$index]}^" \
+                            | cut -d: -f2- \
+                            | egrep -o ".*\.apk" )
+        echo "$FILEPATH && ${files[$index]}"
+        do_android_pull "$FILEPATH" "${files[$index]}.apk"
     else
         break
     fi
 }
 
 do_android_pull(){
-    # adb pull $1
+    adb pull -p "$1" "$2"
     echo "Downloading $1"
     sleep 1
 }
