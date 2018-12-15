@@ -47,6 +47,7 @@ do_connect_to_device_over_IP(){
 }
 
 do_look_for_running_packaged(){
+    [[ ! "$TEMPPACKAGESDB" -s ]] && do_package_list_downloads
     # list all packages and then get all the IDs for the ones that are running
     while read package; do 
         packageName=$(echo "$package" | cut -d":" -f2)
@@ -58,6 +59,7 @@ do_look_for_running_packaged(){
 }
 
 do_package_list_downloads(){
+    [[ ! "$TEMPPACKAGESDB" -s ]] && do_package_list_downloads
     local i=0
     local s=65    # decimal ASCII "A"
     while read file; do
@@ -88,6 +90,7 @@ do_package_list_downloads(){
 }
 
 do_download_all_packages(){
+    [[ ! "$TEMPPACKAGESDB" -s ]] && do_package_list_downloads
     while read PACKAGE; do
         local FILEPATH=$( grep "$PACKAGE" $TEMPPACKAGESDB \
                             | cut -d: -f2- \
