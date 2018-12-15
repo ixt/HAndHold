@@ -4,29 +4,30 @@
 
 TEMPPACKAGESDB=$(mktemp)
 _UtilityForDrawingWindows="whiptail"
+ignoreSystemApps=1
 
-# if width is 0 or less than 60, make it 80
-# if width is greater than 178 then make it 120
+# if width is 0 or less than 60, make it 60
+# if width is greater than 120 then make it 120
 calc_whiptail_size(){
     WT_HEIGHT=20
     WT_WIDTH=$(tput cols)
 
-    if [ -z "$WT_WIDTH" ] || [ "$WT_WIDTH" -lt 50 ]; then
+    if [ -z "$WT_WIDTH" ] || [ "$WT_WIDTH" -lt 60 ]; then
         WT_WIDTH=60
     fi
-    if [ "$WT_WIDTH" -gt 60 ]; then
-        WT_WIDTH=60
+    if [ "$WT_WIDTH" -gt 80 ]; then
+        WT_WIDTH=80
     fi
 
     WT_MENU_HEIGHT=$(($WT_HEIGHT-7))
 }
 
 do_update_package_database(){
-    adb shell pm list packages \
-        | cut -d: -f2  \
-            > $TEMPPACKAGESDB
+    adb shell pm list packages -f \
+        > $TEMPPACKAGESDB
     [[ "$?" -ne "0" ]] && exit 1
-    whiptail --textbox "Packages found: $(cat $TEMPPACKAGESDB | wc -l)" 10 20
+    [[ "$ignoreSystemApps" -eq "1" ]] && sed -i -e "/\/system\//d" $TEMPPACKAGESDB 
+    echo "Packages found: $(cat $TEMPPACKAGESDB | wc -l)"
 }
 
 do_about() {
@@ -53,7 +54,7 @@ do_look_for_running_packaged(){
         isRunning=$(adb shell pidof $packageName)
         [[ "$isRunning" -ne "0" ]] && \
             echo "$packageName running as $isRunning"
-    done < $TEMPPACKAGESDB
+    done < <(sed -e "s/.*=//g" $TEMPPACKAGESDB)
 }
 
 do_package_list_downloads(){
@@ -65,7 +66,7 @@ do_package_list_downloads(){
         files[$i+1]="$file"    # save file name
         ((i+=2))
         ((s++))
-    done < $TEMPPACKAGESDB
+    done < <(sed -e "s/.*=//g" $TEMPPACKAGESDB)
 
     local PACKAGE=$(whiptail --title "Download a package" \
         --menu "Please select the package you want to download" 14 40 6 "${files[@]}" \
@@ -77,21 +78,28 @@ do_package_list_downloads(){
     if [ $RET -eq 1 ]; then
         exit 1
     elif [ $RET -eq 0 ]; then
-        local FILEPATH=$(adb shell pm list packages -f \
-                            | egrep "=${files[$index]}^" \
+        local FILEPATH=$( grep "${files[$index]}" $TEMPPACKAGESDB \
                             | cut -d: -f2- \
                             | egrep -o ".*\.apk" )
-        echo "$FILEPATH && ${files[$index]}"
-        do_android_pull "$FILEPATH" "${files[$index]}.apk"
+        do_android_pull "$FILEPATH" "./APKS/${files[$index]}.apk"
     else
         break
     fi
 }
 
+do_download_all_packages(){
+    while read PACKAGE; do
+        local FILEPATH=$( grep "$PACKAGE" $TEMPPACKAGESDB \
+                            | cut -d: -f2- \
+                            | egrep -o ".*\.apk" )
+        echo "$index: $PACKAGE && $FILEPATH"
+        do_android_pull "$FILEPATH" "./APKS/$PACKAGE.apk"
+    done < <(sed -e "s/.*=//g" $TEMPPACKAGESDB)
+}
+
 do_android_pull(){
-    adb pull -p "$1" "$2"
     echo "Downloading $1"
-    sleep 1
+    adb pull -p "$1" "$2"
 }
 
 #
@@ -106,7 +114,8 @@ while true; do
     "2 Update Package Database" "Download a list of packages on the device" \
     "3 USB->IP" "Enable Network ADB on USB connected device" \
     "4 Download APKs" "Download individual APKs" \
-    "5 About" "What's this all about?" \
+    "5 Download All APKs" "Download all APKs" \
+    "6 About" "What's this all about?" \
     3>&1 1>&2 2>&3)
     RET=$?
     if [ $RET -eq 1 ]; then
@@ -117,7 +126,8 @@ while true; do
             2\ *) do_update_package_database ;;
             3\ *) do_enable_tcp_on_usb_device ;;
             4\ *) do_package_list_downloads ;;
-            5\ *) do_about ;;
+            5\ *) do_download_all_packages ;;
+            6\ *) do_about ;;
             *) whiptail --msgbox "Unrecognised option" 20 60 1 ;;
         esac
     else
