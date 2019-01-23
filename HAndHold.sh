@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # Utility for dealing with ADB
-# CC-0 Ixtli Orange 2018
+# CC-0 Ixtli Orange 2019
 
 TEMPPACKAGESDB=$(mktemp)
 _UtilityForDrawingWindows="whiptail"
 ignoreSystemApps=1
+SCRIPTDIR=$(dirname $0)
+APKDIR=${1:-~/APKS}
+
+mkdir -p $APKDIR >/dev/null
 
 # if width is 0 or less than 60, make it 60
 # if width is greater than 120 then make it 120
@@ -49,13 +53,58 @@ do_connect_to_device_over_IP(){
 do_look_for_running_packaged(){
     [[ ! -s "$TEMPPACKAGESDB" ]] && do_package_list_downloads
     # list all packages and then get all the IDs for the ones that are running
-    while read package; do 
-        packageName=$(echo "$package" | cut -d":" -f2)
-        isRunning="0"
-        isRunning=$(adb shell pidof $packageName)
-        [[ "$isRunning" -ne "0" ]] && \
-            echo "$packageName running as $isRunning"
-    done < <(sed -e "s/.*=//g" $TEMPPACKAGESDB)
+    for package in $(sed -e "s/.*=//g" $TEMPPACKAGESDB); do
+        #packageName=$(echo "$package" | cut -d":" -f2)
+        isRunning=$(adb shell pidof $package)
+        [[ "$isRunning" -ne "0" ]] && [[ "$isRunning" -ne "1" ]] && \
+            echo "$package running as $isRunning"
+    done
+}
+
+do_pid_logcat(){
+    local PID=$1
+    local outFile=$2
+    if [[ $outFile ]]; then  
+        adb logcat --pid=$PID | tee $outFile
+    else
+        adb logcat --pid=$PID 
+    fi
+}
+
+do_pid_logcat_selection(){
+    [[ ! -s "$TEMPPACKAGESDB" ]] && do_package_list_downloads
+    # list all packages and then get all the IDs for the ones that are running
+    local i=0
+    local s=65    # decimal ASCII "A"
+    for package in $(sed -e "s/.*=//g" $TEMPPACKAGESDB); do
+        # convert to octal then ASCII character for selection tag
+        isRunning=$(adb shell pidof $package)
+        if [[ "$isRunning" -ne "0" ]] && [[ "$isRunning" -ne "1" ]]; then 
+            echo "$package running as $isRunning"
+            files[$i]=$(echo -en "\0$(( $s / 64 * 100 + $s % 64 / 8 * 10 + $s % 8 ))")
+            files[$i+1]="$package:$isRunning"    # save file name
+            ((i+=2))
+            ((s++))
+        fi
+    done 
+
+    local PACKAGE=$(whiptail --title "Logcat Menu" \
+        --menu "Please select the package you want to view the logcat output of" 14 40 6 "${files[@]}" \
+        3>&1 1>&2 2>&3)
+    local RET=$?
+
+    ((index = 2 * ( $( printf "%d" "'$PACKAGE" ) - 65 ) + 1 ))
+
+    if [ $RET -eq 1 ]; then
+        exit 1
+    elif [ $RET -eq 0 ]; then
+        packageName=$(echo "${files[$index]}" | cut -d: -f1)
+        packagePID=$(echo "${files[$index]}" | cut -d: -f2)
+        do_pid_logcat "$packagePID" "$packageName.log"
+        exit
+    else
+        break
+    fi
 }
 
 do_package_list_downloads(){
@@ -118,7 +167,8 @@ while true; do
     "3 USB->IP" "Enable Network ADB on USB connected device" \
     "4 Download APKs" "Download individual APKs" \
     "5 Download All APKs" "Download all APKs" \
-    "6 About" "What's this all about?" \
+    "6 Logcat" "View the debugging output for a given running package" \
+    "7 About" "What's this all about?" \
     3>&1 1>&2 2>&3)
     RET=$?
     if [ $RET -eq 1 ]; then
@@ -130,7 +180,8 @@ while true; do
             3\ *) do_enable_tcp_on_usb_device ;;
             4\ *) do_package_list_downloads ;;
             5\ *) do_download_all_packages ;;
-            6\ *) do_about ;;
+            6\ *) do_look_for_running_packaged ;;
+            7\ *) do_about ;;
             *) whiptail --msgbox "Unrecognised option" 20 60 1 ;;
         esac
     else
