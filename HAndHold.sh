@@ -80,7 +80,6 @@ do_pid_logcat_selection(){
         # convert to octal then ASCII character for selection tag
         isRunning=$(adb shell pidof $package)
         if [[ "$isRunning" -ne "0" ]] && [[ "$isRunning" -ne "1" ]]; then 
-            echo "$package running as $isRunning"
             files[$i]=$(echo -en "\0$(( $s / 64 * 100 + $s % 64 / 8 * 10 + $s % 8 ))")
             files[$i+1]="$package:$isRunning"    # save file name
             ((i+=2))
@@ -180,7 +179,7 @@ while true; do
             3\ *) do_enable_tcp_on_usb_device ;;
             4\ *) do_package_list_downloads ;;
             5\ *) do_download_all_packages ;;
-            6\ *) do_look_for_running_packaged ;;
+            6\ *) do_pid_logcat_selection ;;
             7\ *) do_about ;;
             *) whiptail --msgbox "Unrecognised option" 20 60 1 ;;
         esac
