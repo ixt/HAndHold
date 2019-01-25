@@ -132,7 +132,7 @@ do_package_list_downloads(){
         local FILEPATH=$( grep "${files[$index]}" $TEMPPACKAGESDB \
                             | cut -d: -f2- \
                             | egrep -o ".*\.apk" )
-        do_android_pull "$FILEPATH" "./APKS/${files[$index]}.apk"
+        do_android_pull "$FILEPATH" "$APKDIR/${files[$index]}.apk"
     else
         break
     fi
@@ -145,7 +145,7 @@ do_download_all_packages(){
                             | cut -d: -f2- \
                             | egrep -o ".*\.apk" )
         echo "$index: $PACKAGE && $FILEPATH"
-        do_android_pull "$FILEPATH" "./APKS/$PACKAGE.apk"
+        do_android_pull "$FILEPATH" "$APKDIR/$PACKAGE.apk"
     done < <(sed -e "s/.*=//g" $TEMPPACKAGESDB)
 }
 
