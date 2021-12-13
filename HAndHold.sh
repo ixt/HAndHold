@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Utility for dealing with ADB
-# CC-0 Ixtli Orange 2019
+# CC-0 Orange 2021
 
 TEMPPACKAGESDB=$(mktemp)
 _UtilityForDrawingWindows="whiptail"
 ignoreSystemApps=1
 SCRIPTDIR=$(dirname $0)
 APKDIR=${1:-~/APKS}
+DEVICE=${2:-emulator-5554}
 
 mkdir -p $APKDIR >/dev/null
 
@@ -27,7 +28,7 @@ calc_whiptail_size(){
 }
 
 do_update_package_database(){
-    adb shell pm list packages -f \
+    adb -s $DEVICE shell pm list packages -f \
         > $TEMPPACKAGESDB
     [[ "$?" -ne "0" ]] && exit 1
     [[ "$ignoreSystemApps" -eq "1" ]] && sed -i -e "/\/system\//d" $TEMPPACKAGESDB 
@@ -55,7 +56,7 @@ do_look_for_running_packaged(){
     # list all packages and then get all the IDs for the ones that are running
     for package in $(sed -e "s/.*=//g" $TEMPPACKAGESDB); do
         #packageName=$(echo "$package" | cut -d":" -f2)
-        isRunning=$(adb shell pidof $package)
+        isRunning=$(adb -s $DEVICE shell pidof $package)
         [[ "$isRunning" -ne "0" ]] && [[ "$isRunning" -ne "1" ]] && \
             echo "$package running as $isRunning"
     done
@@ -65,9 +66,9 @@ do_pid_logcat(){
     local PID=$1
     local outFile=$2
     if [[ $outFile ]]; then  
-        adb logcat --pid=$PID | tee $outFile
+        adb -s $DEVICE logcat --pid=$PID | tee $outFile
     else
-        adb logcat --pid=$PID 
+        adb -s $DEVICE logcat --pid=$PID 
     fi
 }
 
@@ -78,7 +79,7 @@ do_pid_logcat_selection(){
     local s=65    # decimal ASCII "A"
     for package in $(sed -e "s/.*=//g" $TEMPPACKAGESDB); do
         # convert to octal then ASCII character for selection tag
-        isRunning=$(adb shell pidof $package)
+        isRunning=$(adb -s $DEVICE shell pidof $package)
         if [[ "$isRunning" -ne "0" ]] && [[ "$isRunning" -ne "1" ]]; then 
             files[$i]=$(echo -en "\0$(( $s / 64 * 100 + $s % 64 / 8 * 10 + $s % 8 ))")
             files[$i+1]="$package:$isRunning"    # save file name
@@ -150,7 +151,7 @@ do_download_all_packages(){
 
 do_android_pull(){
     echo "Downloading $1"
-    adb pull -p "$1" "$2"
+    adb -s $DEVICE pull -p "$1" "$2"
 }
 
 #
